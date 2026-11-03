@@ -86,7 +86,7 @@ co_dev
 - 推送或合并 main、打标签、修订协约，先问用户。
 - 本机 PowerShell 的 `bash` 是 WSL。协作命令统一走 `scripts/collab.cmd`。
 - 本仓库远端用 SSH 别名 `github-co_dev`；不要动 `~/.ssh/config` 里的 `github.com` 条目（用户其他项目用的是 johnhowl 账号）。
-- 本机 gh CLI 登录的是 Jiangzhixungod（用于管理本仓库，例如添加部署密钥）。
+- 身份边界：本仓库内作者 Jiangzhixun、只操作 Jiangzhixungod/co_dev；本仓库外作者 johnhowl。本机 gh 未登录（详见 CLAUDE.md "本机执行注意"）。
 
 ## 收口时怎么更新这个文件
 

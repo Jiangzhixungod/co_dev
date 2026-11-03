@@ -44,6 +44,8 @@ Codex 负责编码与测试。**双方唯一的通信渠道是 Git 仓库。**
 
 - 本机 PowerShell 里的 `bash` 是 **WSL 启动器**，不是 Git Bash。协作命令统一用 `scripts\collab.cmd`（在 Bash 工具里写作 `scripts/collab.cmd`）。
 - 本仓库远端走 SSH 别名：`git@github-co_dev:Jiangzhixungod/co_dev.git`（部署密钥 `~/.ssh/id_ed25519_github`）。**不要改 `~/.ssh/config` 的 `github.com` 条目**，用户的其他项目用的是 johnhowl 账号。
+- **身份边界（用户规定）**：本仓库内提交作者是 `Jiangzhixun <220476717+Jiangzhixungod@users.noreply.github.com>`（仓库本地配置），**只操作 `Jiangzhixungod/co_dev` 这一个仓库**；本仓库外是 `johnhowl`（git 全局配置）。不要改全局身份，不要给本仓库添加其他远端。
+- 本机 gh **未登录**（避免他账号的全权令牌留在本机）。确实需要 gh 时（例如添加部署密钥），由用户用 Jiangzhixungod 临时登录，用完 `gh auth logout`；或者改用只授权 co_dev 的细粒度令牌。
 
 ---
 
