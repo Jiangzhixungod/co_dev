@@ -1,0 +1,11 @@
+ticket: T-0001-merge-sort
+state: dispatched
+owner: codex
+by: claude
+updated: 2026-11-03T05:07:15-08:00
+message: 00-ticket.md
+base: 31bbb49cbf23b356724a3c31206901a9c3bda66d
+code_head: 
+reviewed_head: 
+resume: 
+rework: 0
