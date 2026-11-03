@@ -49,11 +49,27 @@ EOF
 fi
 
 if [ "$in_git" = 1 ]; then
-  echo "=== 协作收件箱：本地快照（未联网）。开工前先跑 scripts/collab.cmd inbox -As claude 拉取最新 ==="
+  # 模式：git config collab.mode；未设置时有 origin 远端即 remote，否则 local（与 scripts/collab.ps1 一致）
+  mode="$(git -C "$root" config collab.mode 2>/dev/null || true)"
+  if [ "$mode" != local ] && [ "$mode" != remote ]; then
+    if git -C "$root" remote get-url origin >/dev/null 2>&1; then mode=remote; else mode=local; fi
+  fi
+  if [ "$mode" = local ]; then
+    echo "=== 协作收件箱（本地模式：同机同仓库，工作区共享）。开工前先跑 scripts/collab.cmd inbox -As claude ==="
+    refs_root=refs/heads/tkt/; prefix=tkt/
+  else
+    echo "=== 协作收件箱：本地快照（未联网）。开工前先跑 scripts/collab.cmd inbox -As claude 拉取最新 ==="
+    refs_root=refs/remotes/origin/tkt/; prefix=origin/tkt/
+  fi
+  cur="$(git -C "$root" symbolic-ref --short -q HEAD 2>/dev/null || true)"
   n=0
-  for ref in $(git -C "$root" for-each-ref --format='%(refname:short)' refs/remotes/origin/tkt/ 2>/dev/null); do
-    dir="${ref#origin/tkt/}"
-    st="$(git -C "$root" show "$ref:.ai-collab/tickets/$dir/STATUS" 2>/dev/null | tr -d '\r')"
+  for ref in $(git -C "$root" for-each-ref --format='%(refname:short)' "$refs_root" 2>/dev/null); do
+    dir="${ref#"$prefix"}"
+    if [ "$mode" = local ] && [ "$cur" = "tkt/$dir" ] && [ -f "$root/.ai-collab/tickets/$dir/STATUS" ]; then
+      st="$(tr -d '\r' < "$root/.ai-collab/tickets/$dir/STATUS")"
+    else
+      st="$(git -C "$root" show "$ref:.ai-collab/tickets/$dir/STATUS" 2>/dev/null | tr -d '\r')"
+    fi
     state="$(printf '%s\n' "$st" | sed -n 's/^state: *//p')"
     owner="$(printf '%s\n' "$st" | sed -n 's/^owner: *//p')"
     mark="  "

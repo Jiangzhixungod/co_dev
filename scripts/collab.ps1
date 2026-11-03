@@ -1,11 +1,15 @@
 ﻿<#
 .SYNOPSIS
-    co_dev 协作工具：Claude x Codex 跨机器工单总线。规则见 COLLABORATION.md。
+    co_dev 协作工具：Claude x Codex 工单总线（远程模式 / 本地模式）。规则见 COLLABORATION.md。
 
 .DESCRIPTION
     入口：scripts\collab.cmd <命令> [参数]；不带参数显示帮助。
     兼容 Windows PowerShell 5.1 与 PowerShell 7。
     本文件必须保存为 UTF-8 with BOM（5.1 读无 BOM 的中文脚本会乱码）。
+
+    模式（git config collab.mode；未设置时：有 origin 远端 = remote，否则 = local）
+      remote  跨机器：工单分支经 GitHub 收发（push 即送达）
+      local   同机同仓库：共享一个工作区，提交即送达，不联网；一次只进行一张工单
 #>
 param(
     [Parameter(Position = 0)]
@@ -19,6 +23,7 @@ param(
     [string]$Summary = "",
     [string]$Why = "",
     [string]$Files = "",
+    [string]$Mode = "",
     [switch]$Offline,
     [switch]$NoPush,
     [switch]$Push,
@@ -35,6 +40,8 @@ $Remote = "origin"
 $TicketsRel = ".ai-collab/tickets"
 $TemplatesDir = Join-Path $Root ".ai-collab\templates"
 $CodeExclude = ":(exclude).ai-collab/tickets"
+$script:CollabMode = "remote"
+$script:MainRef = "origin/main"
 
 # ---------------------------------------------------------------- 状态机（与 COLLABORATION.md §3 一致）
 $Owner = @{
@@ -118,18 +125,39 @@ function New-Commit([string]$subject, [string[]]$trailers) {
     finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
 }
 
-function Invoke-Fetch {
-    if ($Offline) { return }
-    $code = Invoke-GitRun -GitArgs @("fetch", "--prune", "--quiet", $Remote) -AllowFail
-    if ($code -ne 0) { Warn "拉取远端失败（离线？），以下基于本地快照。" }
-}
-
 function Get-CurrentBranch { return (Get-GitLine @("symbolic-ref", "--short", "-q", "HEAD")) }
 
 function Test-RefExists([string]$ref) {
     return ((Get-GitLine @("rev-parse", "--verify", "-q", $ref)) -ne "")
 }
 
+# ---------------------------------------------------------------- 模式
+function Initialize-Mode {
+    $m = Get-GitLine @("config", "collab.mode")
+    if ($m -ne "local" -and $m -ne "remote") {
+        if ((Get-GitLine @("remote", "get-url", $Remote)) -ne "") { $m = "remote" } else { $m = "local" }
+    }
+    $script:CollabMode = $m
+    if ($m -eq "local") { $script:MainRef = "main" } else { $script:MainRef = "$Remote/main" }
+}
+
+function Test-Local { return ($script:CollabMode -eq "local") }
+
+function Invoke-Fetch {
+    if ($Offline -or (Test-Local)) { return }
+    $code = Invoke-GitRun -GitArgs @("fetch", "--prune", "--quiet", $Remote) -AllowFail
+    if ($code -ne 0) { Warn "拉取远端失败（离线？），以下基于本地快照。" }
+}
+
+# 投递：远程模式推送工单分支；本地模式提交即送达。
+function Invoke-Deliver([string]$branch) {
+    if (Test-Local) { Info "（本地模式：提交即送达，不推送）"; return $true }
+    if ($NoPush) { Warn "已提交但未推送（-NoPush）。对方要等你推送后才收得到：git push -u $Remote $branch"; return $false }
+    [void](Invoke-GitRun @("push", "-q", "-u", $Remote, $branch))
+    return $true
+}
+
+# ---------------------------------------------------------------- 工作区
 function Get-DirtyPaths([string]$excludeDirRel) {
     $paths = @()
     foreach ($l in @(Invoke-GitOut @("status", "--porcelain", "--untracked-files=all"))) {
@@ -148,6 +176,24 @@ function Assert-Clean([string]$why) {
         $list = ($d | Select-Object -First 10) -join "`n  "
         Fail ("工作区有 {0} 处未提交改动，{1}。先提交（或 git stash）再继续：`n  {2}" -f $d.Count, $why, $list)
     }
+}
+
+# 本地模式：工作区是共享的。当前分支是对方持球的工单时，切走会打断对方。
+function Assert-CanLeaveBranch([string]$role) {
+    if (-not (Test-Local)) { return }
+    $cur = Get-CurrentBranch
+    if (-not $cur.StartsWith("tkt/")) { return }
+    $o = [string](Get-TicketStatus $cur.Substring(4))["owner"]
+    if (($o -eq "claude" -or $o -eq "codex") -and $o -ne $role) {
+        Fail "本地模式下工作区是共享的：当前工单 $($cur.Substring(4)) 正由 $o 持球，切换分支会打断对方。等球回到你手里再操作。"
+    }
+}
+
+function Switch-ToBranch([string]$branch) {
+    if ((Get-CurrentBranch) -eq $branch) { return }
+    if (Test-RefExists "refs/heads/$branch") { [void](Invoke-GitRun @("switch", "-q", $branch)) }
+    elseif (-not (Test-Local) -and (Test-RefExists "$Remote/$branch")) { [void](Invoke-GitRun @("switch", "-q", "--track", "$Remote/$branch")) }
+    else { Fail "找不到分支 $branch。" }
 }
 
 # ---------------------------------------------------------------- 工单
@@ -171,8 +217,10 @@ function Write-StatusFile([string]$path, $h) {
 
 function Get-AllTicketDirs {
     $set = @{}
-    foreach ($r in @(Invoke-GitOut @("for-each-ref", "--format=%(refname:short)", "refs/remotes/$Remote/tkt/") -AllowFail)) {
-        $set[$r.Substring(("$Remote/tkt/").Length)] = $true
+    if (-not (Test-Local)) {
+        foreach ($r in @(Invoke-GitOut @("for-each-ref", "--format=%(refname:short)", "refs/remotes/$Remote/tkt/") -AllowFail)) {
+            $set[$r.Substring(("$Remote/tkt/").Length)] = $true
+        }
     }
     foreach ($r in @(Invoke-GitOut @("for-each-ref", "--format=%(refname:short)", "refs/heads/tkt/") -AllowFail)) {
         $set[$r.Substring(4)] = $true
@@ -195,15 +243,17 @@ function Resolve-Ticket([string]$t) {
 }
 
 # 默认：在该工单分支上时读工作区（open 之后它就是最新的）。
-# -Shared：读双方共享的状态，即远端优先（inbox 用；本地分支可能落后远端）。
+# -Shared：读双方共享的状态。远程模式下远端优先（本地分支可能落后远端）；本地模式下工作区与本地分支就是共享状态。
 function Get-TicketStatus([string]$dir, [switch]$Shared) {
     $rel = "$TicketsRel/$dir/STATUS"
     $abs = Join-Path $Root $rel
     $onBranch = ((Get-CurrentBranch) -eq "tkt/$dir")
-    if ($onBranch -and -not $Shared -and (Test-Path -LiteralPath $abs)) {
+    if ($onBranch -and (Test-Path -LiteralPath $abs) -and (-not $Shared -or (Test-Local))) {
         return (Read-StatusText ([System.IO.File]::ReadAllText($abs, $Utf8)))
     }
-    foreach ($ref in @("$Remote/tkt/$dir", "tkt/$dir")) {
+    $refs = @("$Remote/tkt/$dir", "tkt/$dir")
+    if (Test-Local) { $refs = @("tkt/$dir") }
+    foreach ($ref in $refs) {
         $txt = @(Invoke-GitOut @("show", ($ref + ":" + $rel)) -AllowFail)
         if ($txt.Count -gt 0) { return (Read-StatusText ($txt -join "`n")) }
     }
@@ -213,9 +263,10 @@ function Get-TicketStatus([string]$dir, [switch]$Shared) {
     return [ordered]@{}
 }
 
-# 已合并工单的本地残留：远端工单分支已删，本地分支上提交过工单目录，且已并入 origin/main。
+# 远程模式下已合并工单的本地残留：远端工单分支已删，本地分支上提交过工单目录，且已并入 origin/main。
 # （刚 new 出来、尚未发送的草稿分支没有提交过工单目录，不会被误判。）
 function Test-MergedLocalTicket([string]$dir) {
+    if (Test-Local) { return $false }
     if (Test-RefExists "$Remote/tkt/$dir") { return $false }
     if (-not (Test-RefExists "refs/heads/tkt/$dir")) { return $false }
     if (-not (Test-RefExists "$Remote/main")) { return $false }
@@ -229,7 +280,7 @@ function Assert-Role {
 
 function Assert-OnTicketBranch([string]$dir) {
     $cur = Get-CurrentBranch
-    if ($cur -ne "tkt/$dir") { Fail "当前在分支 '$cur'，不在 tkt/$dir。先运行：scripts\collab.cmd open -Ticket $dir" }
+    if ($cur -ne "tkt/$dir") { Fail "当前在分支 '$cur'，不在 tkt/$dir。先运行：scripts\collab.cmd open -Ticket $dir -As <角色>" }
 }
 
 function Expand-Template([string]$name, [string]$dest, $vars) {
@@ -248,6 +299,8 @@ function Get-Messages([string]$dirAbs) {
 }
 
 function Short([string]$sha) { if ($sha.Length -ge 8) { return $sha.Substring(0, 8) } return $sha }
+
+function Get-TicketId([string]$dir) { return (($dir -split '-')[0..1] -join '-') }
 
 function Show-Ticket([string]$dir) {
     $st = Get-TicketStatus $dir
@@ -303,17 +356,19 @@ function Cmd-Help {
     Info @"
 co_dev 协作工具    用法：scripts\collab.cmd <命令> [参数]      规则：COLLABORATION.md
 
-  setup                                   每台机器一次：装钩子、pull.ff=only，检查身份与远端
-  inbox  [-As claude|codex] [-Offline]    拉取远端并列出所有工单，★ = 轮到你（每次开场先跑）
-  new    -Slug <英文短名>                 [claude] 从 origin/main 建工单分支和 00-ticket.md
-  open   -Ticket T-0001                   切到工单分支并快进到远端最新，显示状态与消息
+  setup  [-Mode remote|local]             每台机器 / 每个克隆一次：装钩子、配置 git、设定模式
+  inbox  [-As claude|codex] [-Offline]    列出所有工单，★ = 轮到你（每次开场先跑）
+  new    -Slug <英文短名>                 [claude] 从 main 建工单分支和 00-ticket.md
+  open   -Ticket T-0001 -As <角色>        切到工单分支（远程模式下快进到远端最新），显示状态与消息
   msg    -Type <类型> -As <角色>          按模板生成下一条序号消息
-  send   -To <状态> -As <角色> [-NoPush]  校验转移 → 写 STATUS → 提交 → 推送（持球方）
+  send   -To <状态> -As <角色> [-NoPush]  校验转移 → 写 STATUS → 提交 → 投递（持球方）
   diff   [-Since reviewed]                [claude] 待审代码 diff 统计与查看命令
-  wip    -As <角色> [-Commit]             覆盖式 WIP 存档；-Commit 提交并推送当前全部改动
-  merge  -Ticket T-0001 [-Push]           [claude] 不带 -Push 为预览；-Push 需用户事先确认
+  wip    -As <角色> [-Commit]             覆盖式 WIP 存档；-Commit 提交（并投递）当前全部改动
+  merge  -Ticket T-0001 [-Push]           [claude] 不带 -Push 为预览；-Push 执行合并（需用户事先确认）
   fixnote -Summary <摘要> -Why <理由>     [codex] A 级自治修复记入 FIXLOG.md
 
+  模式：remote = 跨机器，经 GitHub 收发；local = 同机同仓库，提交即送达，一次只进行一张工单。
+        当前：$script:CollabMode（git config collab.mode；未设置时有 origin 远端即 remote）
   在工单分支上时，-Ticket 可省略（取当前分支）。
   消息类型：$($MsgTypes -join ", ")
   状态：draft dispatched impl_done fix_requested fix_done rework_requested review_passed
@@ -322,11 +377,18 @@ co_dev 协作工具    用法：scripts\collab.cmd <命令> [参数]      规则
 }
 
 function Cmd-Setup {
+    if ($Mode -ne "") {
+        if ($Mode -ne "local" -and $Mode -ne "remote") { Fail "-Mode 只能是 remote 或 local。" }
+        [void](Invoke-GitRun @("config", "collab.mode", $Mode))
+        Initialize-Mode
+    }
     [void](Invoke-GitRun @("config", "core.hooksPath", "scripts/git-hooks"))
     [void](Invoke-GitRun @("config", "pull.ff", "only"))
     [void](Invoke-GitRun @("config", "core.quotepath", "false"))
     [void](Invoke-GitRun @("config", "push.autoSetupRemote", "true"))
     Ok "已配置：core.hooksPath=scripts/git-hooks  pull.ff=only  core.quotepath=false"
+    if (Test-Local) { Ok "模式：local（同机同仓库：提交即送达，不联网；一次只进行一张工单）" }
+    else { Ok "模式：remote（跨机器：工单分支经远端收发）" }
     $name = Get-GitLine @("config", "user.name")
     $mail = Get-GitLine @("config", "user.email")
     if ($name -eq "" -or $mail -eq "") {
@@ -335,14 +397,16 @@ function Cmd-Setup {
         Info '  git config user.email "<你的邮箱>"'
     } else { Ok "提交身份：$name <$mail>" }
     $url = Get-GitLine @("remote", "get-url", $Remote)
-    if ($url -eq "") { Warn "没有远端 $Remote。请：git remote add origin <仓库地址>" } else { Ok "远端 ${Remote}：$url" }
+    if ($url -ne "") { Ok "远端 ${Remote}：$url" }
+    elseif (-not (Test-Local)) { Warn "remote 模式但没有远端 $Remote。请：git remote add origin <仓库地址>" }
+    if (-not (Test-RefExists "refs/heads/main")) { Warn "还没有 main 分支（建工单需要从 main 出发）。" }
 }
 
 function Cmd-Inbox {
     Invoke-Fetch
     $cur = Get-CurrentBranch
 
-    # 已合并工单的本地残留分支：清理，避免误报
+    # 远程模式：已合并工单的本地残留分支，清理，避免误报
     $merged = @{}
     foreach ($d in @(Get-AllTicketDirs)) {
         if (-not (Test-MergedLocalTicket $d)) { continue }
@@ -355,7 +419,9 @@ function Cmd-Inbox {
         }
     }
     $dirs = @(Get-AllTicketDirs | Where-Object { -not $merged.ContainsKey($_) })
+
     Info ""
+    if (Test-Local) { Info "模式：local（同机同仓库）" }
     if ($dirs.Count -eq 0) {
         Info "（没有进行中的工单。已合并的工单归档在 main 的 $TicketsRel/）"
     } else {
@@ -366,11 +432,13 @@ function Cmd-Inbox {
             $flag = ""
             if ($As -ne "" -and $st["owner"] -eq $As) { $flag = "★"; $mine++ }
             $note = ""
-            if (-not (Test-RefExists "$Remote/tkt/$d")) { $note = "（未推送）" }
-            elseif (Test-RefExists "refs/heads/tkt/$d") {
-                $ahead = Get-GitLine @("rev-list", "--count", "$Remote/tkt/$d..tkt/$d")
-                if ($ahead -ne "" -and [int]$ahead -gt 0) { $note = "（本地有 $ahead 个未推送提交）" }
-            }
+            if (-not (Test-Local)) {
+                if (-not (Test-RefExists "$Remote/tkt/$d")) { $note = "（未推送）" }
+                elseif (Test-RefExists "refs/heads/tkt/$d") {
+                    $ahead = Get-GitLine @("rev-list", "--count", "$Remote/tkt/$d..tkt/$d")
+                    if ($ahead -ne "" -and [int]$ahead -gt 0) { $note = "（本地有 $ahead 个未推送提交）" }
+                }
+            } elseif ($st["state"] -eq "draft") { $note = "（草稿）" }
             $upd = [string]$st["updated"]
             if ($upd.Length -ge 16) { $upd = $upd.Substring(0, 16).Replace("T", " ") }
             Info ("{0,-2} {1,-30} {2,-17} {3,-7} {4,-17} {5}{6}" -f $flag, $d, $st["state"], $st["owner"], $upd, $st["message"], $note)
@@ -381,16 +449,23 @@ function Cmd-Inbox {
     Info ""
     $dirty = @(Get-DirtyPaths "")
     Info ("当前分支：{0}   未提交改动：{1} 处" -f $cur, $dirty.Count)
-    if ($cur -ne "" -and (Test-RefExists "$Remote/$cur")) {
-        $ab = Get-GitLine @("rev-list", "--left-right", "--count", "$cur...$Remote/$cur")
-        if ($ab -match '^(\d+)\s+(\d+)$') {
-            if ([int]$Matches[2] -gt 0) { Warn ("本地 $cur 落后远端 {0} 个提交（collab open 可快进）" -f $Matches[2]) }
-            if ([int]$Matches[1] -gt 0) { Info ("本地 $cur 领先远端 {0} 个提交（未推送）" -f $Matches[1]) }
+    if (-not (Test-Local)) {
+        if ($cur -ne "" -and (Test-RefExists "$Remote/$cur")) {
+            $ab = Get-GitLine @("rev-list", "--left-right", "--count", "$cur...$Remote/$cur")
+            if ($ab -match '^(\d+)\s+(\d+)$') {
+                if ([int]$Matches[2] -gt 0) { Warn ("本地 $cur 落后远端 {0} 个提交（collab open 可快进）" -f $Matches[2]) }
+                if ([int]$Matches[1] -gt 0) { Info ("本地 $cur 领先远端 {0} 个提交（未推送）" -f $Matches[1]) }
+            }
         }
-    }
-    if ((Test-RefExists "main") -and (Test-RefExists "$Remote/main")) {
-        $behind = Get-GitLine @("rev-list", "--count", "main..$Remote/main")
-        if ($behind -ne "" -and [int]$behind -gt 0) { Info "本地 main 落后 $Remote/main $behind 个提交" }
+        if ((Test-RefExists "main") -and (Test-RefExists "$Remote/main")) {
+            $behind = Get-GitLine @("rev-list", "--count", "main..$Remote/main")
+            if ($behind -ne "" -and [int]$behind -gt 0) { Info "本地 main 落后 $Remote/main $behind 个提交" }
+        }
+    } elseif ($cur.StartsWith("tkt/")) {
+        $o = [string](Get-TicketStatus $cur.Substring(4))["owner"]
+        if ($As -ne "" -and ($o -eq "claude" -or $o -eq "codex") -and $o -ne $As) {
+            Info "（共享工作区正停在 $($cur.Substring(4))，球在 $o 手里：不要切换分支，也不要改这里的文件）"
+        }
     }
 
     # still-here 新鲜度检查：WIP 存档之后又有提交或未提交改动 → 可能过期
@@ -414,22 +489,23 @@ function Cmd-Inbox {
 function Cmd-New {
     if ($Slug -notmatch '^[a-z0-9][a-z0-9-]{1,40}$') { Fail "-Slug 只能用小写英文、数字、连字符（2-41 字符），例如 -Slug user-login" }
     Invoke-Fetch
-    if (-not (Test-RefExists "$Remote/main")) { Fail "远端还没有 main 分支。" }
+    if (-not (Test-RefExists $script:MainRef)) { Fail "还没有 $($script:MainRef) 分支。" }
+    Assert-CanLeaveBranch "claude"
     Assert-Clean "建工单前需要干净的工作区"
     $max = 0
     $names = @(Get-AllTicketDirs)
-    $names += @(Invoke-GitOut @("ls-tree", "--name-only", "$Remote/main", "$TicketsRel/") -AllowFail | ForEach-Object { Split-Path $_ -Leaf })
+    $names += @(Invoke-GitOut @("ls-tree", "--name-only", $script:MainRef, "$TicketsRel/") -AllowFail | ForEach-Object { Split-Path $_ -Leaf })
     foreach ($n in $names) { if ($n -match '^T-(\d+)') { if ([int]$Matches[1] -gt $max) { $max = [int]$Matches[1] } } }
     $dir = ("T-{0:D4}-" -f ($max + 1)) + $Slug
-    $base = Get-GitLine @("rev-parse", "$Remote/main")
-    [void](Invoke-GitRun @("switch", "-q", "--no-track", "-c", "tkt/$dir", "$Remote/main"))
+    $base = Get-GitLine @("rev-parse", $script:MainRef)
+    [void](Invoke-GitRun @("switch", "-q", "--no-track", "-c", "tkt/$dir", $script:MainRef))
     $dirAbs = Join-Path $Root "$TicketsRel/$dir"
     New-Item -ItemType Directory -Force -Path $dirAbs | Out-Null
     $vars = @{ TICKET = $dir; DATE = (Get-Now); FROM = "claude"; BASE = $base; BRANCH = "tkt/$dir"; CODE_HEAD = ""; REVIEWED_HEAD = "" }
     Expand-Template "ticket" (Join-Path $dirAbs "00-ticket.md") $vars
     $st = [ordered]@{ ticket = $dir; state = "draft"; owner = "claude"; by = "claude"; updated = (Get-Now); message = "00-ticket.md"; base = $base; code_head = ""; reviewed_head = ""; resume = ""; rework = "0" }
     Write-StatusFile (Join-Path $dirAbs "STATUS") $st
-    Ok "已建工单 $dir（分支 tkt/$dir，基于 origin/main $(Short $base)）"
+    Ok "已建工单 $dir（分支 tkt/$dir，基于 $($script:MainRef) $(Short $base)）"
     Info "下一步：填写 $TicketsRel/$dir/00-ticket.md，然后："
     Info "  scripts\collab.cmd send -To dispatched -As claude"
 }
@@ -438,13 +514,15 @@ function Cmd-Open {
     Invoke-Fetch   # 先拉取：对方刚派 / 刚交的工单要能解析到
     $dir = Resolve-Ticket $Ticket
     $branch = "tkt/$dir"
-    $cur = Get-CurrentBranch
-    if ($cur -ne $branch) {
+    if ((Get-CurrentBranch) -ne $branch) {
+        if (Test-Local) {
+            if ($As -ne "claude" -and $As -ne "codex") { Fail "本地模式下请用 -As claude 或 -As codex 说明你是谁（工作区共享，需要判断能否切换）。" }
+            Assert-CanLeaveBranch $As
+        }
         Assert-Clean "切换分支前需要干净的工作区"
-        if (Test-RefExists "refs/heads/$branch") { [void](Invoke-GitRun @("switch", "-q", $branch)) }
-        else { [void](Invoke-GitRun @("switch", "-q", "--track", "$Remote/$branch")) }
+        Switch-ToBranch $branch
     }
-    if (Test-RefExists "$Remote/$branch") {
+    if (-not (Test-Local) -and (Test-RefExists "$Remote/$branch")) {
         $code = Invoke-GitRun @("merge", "--ff-only", "-q", "$Remote/$branch") -AllowFail
         if ($code -ne 0) { Fail "本地 $branch 与远端分叉，无法快进。违反了球权规则？请人工检查（git log --graph --oneline $branch $Remote/$branch）。" }
     }
@@ -482,9 +560,9 @@ function Cmd-Send {
     $from = [string]$st["state"]
     Test-Transition $from $To $As
 
-    # 远端没有本地没见过的提交（球权规则的机械校验）
+    # 远程模式：远端没有本地没见过的提交（球权规则的机械校验）
     Invoke-Fetch
-    if (Test-RefExists "$Remote/$branch") {
+    if (-not (Test-Local) -and (Test-RefExists "$Remote/$branch")) {
         $code = Invoke-GitRun @("merge-base", "--is-ancestor", "$Remote/$branch", "HEAD") -AllowFail
         if ($code -ne 0) { Fail "远端 $branch 有本地没有的提交（对方刚推送过？）。先 collab open 同步，再发送。" }
     }
@@ -531,13 +609,8 @@ function Cmd-Send {
     if (Test-Path -LiteralPath $wip) { Remove-Item -LiteralPath $wip -Force }
 
     [void](Invoke-GitRun @("add", "-A", "--", $dirRel))
-    $id = ($dir -split '-')[0..1] -join '-'
-    New-Commit "[$id] ${To}: $($newMsgs -join ', ')" @("Ticket: $dir", "Collab-State: $from -> $To", "Collab-Actor: $As")
-    if ($NoPush) {
-        Warn "已提交但未推送（-NoPush）。对方要等你推送后才收得到：git push -u $Remote $branch"
-    } else {
-        [void](Invoke-GitRun @("push", "-q", "-u", $Remote, $branch))
-    }
+    New-Commit "[$(Get-TicketId $dir)] ${To}: $($newMsgs -join ', ')" @("Ticket: $dir", "Collab-State: $from -> $To", "Collab-Actor: $As")
+    [void](Invoke-Deliver $branch)
     Ok "已发送：$from → $To（$($newMsgs -join ', ')）。球现在在 $($Owner[$To])。"
 }
 
@@ -545,13 +618,16 @@ function Cmd-Diff {
     $dir = Resolve-Ticket $Ticket
     $st = Get-TicketStatus $dir
     $head = [string]$st["code_head"]
-    if ($head -eq "") { $head = "$Remote/tkt/$dir"; if (-not (Test-RefExists $head)) { $head = "tkt/$dir" } }
+    if ($head -eq "") {
+        $head = "tkt/$dir"
+        if (-not (Test-Local) -and (Test-RefExists "$Remote/tkt/$dir")) { $head = "$Remote/tkt/$dir" }
+    }
     if ($Since -eq "reviewed") {
         $base = [string]$st["reviewed_head"]
         if ($base -eq "") { Fail "还没有 reviewed_head（尚未审查过），去掉 -Since 看全量 diff。" }
         $label = "上次审查之后的改动（复审用）"
     } else {
-        $base = Get-GitLine @("merge-base", "$Remote/main", $head)
+        $base = Get-GitLine @("merge-base", $script:MainRef, $head)
         $label = "相对 main 的全部代码改动（/code-review 用）"
     }
     Info "工单 $dir：$label"
@@ -566,7 +642,7 @@ function Cmd-Wip {
     $dir = Resolve-Ticket $Ticket
     Assert-OnTicketBranch $dir
     $st = Get-TicketStatus $dir
-    if ($st["owner"] -ne $As) { Fail "球不在你这里（持球 $($st['owner'])），不能向工单分支推送。" }
+    if ($st["owner"] -ne $As) { Fail "球不在你这里（持球 $($st['owner'])），不能向工单分支提交。" }
     $dirAbs = Join-Path $Root "$TicketsRel/$dir"
     $wip = Join-Path $dirAbs "WIP-$As.md"
     if (-not (Test-Path -LiteralPath $wip)) {
@@ -574,14 +650,13 @@ function Cmd-Wip {
         Ok "已生成 $TicketsRel/$dir/WIP-$As.md（覆盖式：每次整份重写）"
     }
     if (-not $Commit) {
-        Info "写好后提交并推送：scripts\collab.cmd wip -As $As -Commit"
+        Info "写好后提交：scripts\collab.cmd wip -As $As -Commit"
         return
     }
     [void](Invoke-GitRun @("add", "-A"))
-    $id = ($dir -split '-')[0..1] -join '-'
-    New-Commit "[$id] wip: $As 交接存档" @("Ticket: $dir", "Collab-Actor: $As")
-    if (-not $NoPush) { [void](Invoke-GitRun @("push", "-q", "-u", $Remote, "tkt/$dir")) }
-    Ok "WIP 已提交$(if (-not $NoPush) { '并推送' })。"
+    New-Commit "[$(Get-TicketId $dir)] wip: $As 交接存档" @("Ticket: $dir", "Collab-Actor: $As")
+    [void](Invoke-Deliver "tkt/$dir")
+    Ok "WIP 已提交。"
 }
 
 function Cmd-Merge {
@@ -590,42 +665,52 @@ function Cmd-Merge {
     $branch = "tkt/$dir"
     $st = Get-TicketStatus $dir
     if ($st["state"] -ne "accepted") { Fail "只有 accepted 的工单能合并（当前 $($st['state'])）。" }
-    $tip = "$Remote/$branch"
-    if (-not (Test-RefExists $tip)) { $tip = $branch }
+    $tip = $branch
+    if (-not (Test-Local) -and (Test-RefExists "$Remote/$branch")) { $tip = "$Remote/$branch" }
     Info "将以 --no-ff 合入 main 的提交："
-    [void](Invoke-GitRun @("log", "--oneline", "$Remote/main..$tip"))
-    [void](Invoke-GitRun @("diff", "--stat", "$Remote/main...$tip", "--", ".", $CodeExclude))
+    [void](Invoke-GitRun @("log", "--oneline", "$($script:MainRef)..$tip"))
+    [void](Invoke-GitRun @("diff", "--stat", "$($script:MainRef)...$tip", "--", ".", $CodeExclude))
+    $hasRemote = ((Get-GitLine @("remote", "get-url", $Remote)) -ne "")
     if (-not $Push) {
         Info ""
-        Warn "以上为预览，未做任何改动。推送 main 需要用户确认（协约 §4.9）。确认后执行："
+        Warn "以上为预览，未做任何改动。合并 main 需要用户确认（协约 §4.9）。确认后执行："
         Info "  scripts\collab.cmd merge -Ticket $dir -Push"
+        if (Test-Local) {
+            if ($hasRemote) { Info "  （本地模式：合入本地 main，并推送 main 到 $Remote）" } else { Info "  （本地模式：合入本地 main）" }
+        }
         return
     }
+    if ((Get-CurrentBranch) -ne $branch) { Assert-CanLeaveBranch "claude" }
     Assert-Clean "合并前需要干净的工作区"
-    $cur = Get-CurrentBranch
-    if ($cur -ne $branch) {
-        if (Test-RefExists "refs/heads/$branch") { [void](Invoke-GitRun @("switch", "-q", $branch)) }
-        else { [void](Invoke-GitRun @("switch", "-q", "--track", "$Remote/$branch")) }
-    }
-    if (Test-RefExists "$Remote/$branch") { [void](Invoke-GitRun @("merge", "--ff-only", "-q", "$Remote/$branch")) }
+    Switch-ToBranch $branch
+    if (-not (Test-Local) -and (Test-RefExists "$Remote/$branch")) { [void](Invoke-GitRun @("merge", "--ff-only", "-q", "$Remote/$branch")) }
     $statusAbs = Join-Path $Root "$TicketsRel/$dir/STATUS"
     $st = Read-StatusText ([System.IO.File]::ReadAllText($statusAbs, $Utf8))
     $st["state"] = "merged"; $st["owner"] = "none"; $st["by"] = "claude"; $st["updated"] = Get-Now
     Write-StatusFile $statusAbs $st
     [void](Invoke-GitRun @("add", "--", "$TicketsRel/$dir/STATUS"))
-    $id = ($dir -split '-')[0..1] -join '-'
+    $id = Get-TicketId $dir
     New-Commit "[$id] merged" @("Ticket: $dir", "Collab-State: accepted -> merged", "Collab-Actor: claude")
-    if (Test-RefExists "refs/heads/main") { [void](Invoke-GitRun @("switch", "-q", "main")) }
-    else { [void](Invoke-GitRun @("switch", "-q", "--track", "$Remote/main")) }
-    [void](Invoke-GitRun @("merge", "--ff-only", "-q", "$Remote/main"))
+    Switch-ToBranch "main"
+    if (-not (Test-Local)) { [void](Invoke-GitRun @("merge", "--ff-only", "-q", "$Remote/main")) }
     $tmp = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($tmp, "[$id] 合并工单 $dir`n`nTicket: $dir`n", $Utf8)
     try { [void](Invoke-GitRun @("merge", "--no-ff", "-q", "-F", $tmp, $branch)) }
     finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-    [void](Invoke-GitRun @("push", "-q", $Remote, "main"))
-    [void](Invoke-GitRun @("push", "-q", $Remote, "--delete", $branch) -AllowFail)
-    [void](Invoke-GitRun @("branch", "-q", "-d", $branch) -AllowFail)
-    Ok "工单 $dir 已合入 main 并推送，远端工单分支已删除。"
+    if (-not (Test-Local)) {
+        [void](Invoke-GitRun @("push", "-q", $Remote, "main"))
+        [void](Invoke-GitRun @("push", "-q", $Remote, "--delete", $branch) -AllowFail)
+        [void](Invoke-GitRun @("branch", "-q", "-d", $branch) -AllowFail)
+        Ok "工单 $dir 已合入 main 并推送，远端工单分支已删除。"
+    } else {
+        [void](Invoke-GitRun @("branch", "-q", "-d", $branch) -AllowFail)
+        if ($hasRemote) {
+            [void](Invoke-GitRun @("push", "-q", $Remote, "main"))
+            Ok "工单 $dir 已合入本地 main，并已推送 main 到 $Remote。"
+        } else {
+            Ok "工单 $dir 已合入本地 main。"
+        }
+    }
 }
 
 function Cmd-FixNote {
@@ -646,6 +731,7 @@ function Cmd-FixNote {
     Info "  git commit -m `"[autofix] $Summary`""
 }
 
+Initialize-Mode
 switch ($Command.ToLower()) {
     "help"    { Cmd-Help }
     "setup"   { Cmd-Setup }

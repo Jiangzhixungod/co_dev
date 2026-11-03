@@ -1,6 +1,6 @@
 # co_dev 合作协约（Claude × Codex）
 
-> **版本 v1.0 ｜ 生效 2026-11-03 ｜ 适用：本仓库全部工作**
+> **版本 v1.1 ｜ 生效 2026-11-03 ｜ 适用：本仓库全部工作**
 >
 > 本协约是 Claude 与 Codex **共同遵守的唯一权威规约**。`CLAUDE.md`、`AGENTS.md`、
 > `.claude/skills/`、`scripts/` 都只是它的执行入口；任何入口与本协约冲突，**以本协约为准**，
@@ -29,7 +29,18 @@
 
 ## 2. 通信：Git 就是消息总线
 
-双方不在同一台电脑，**只通过** GitHub 仓库 `Jiangzhixungod/co_dev` 交换信息。
+双方之间**只通过 Git 仓库**交换信息。支持两种部署模式，流程、状态机、球权、消息格式完全相同，区别只在传输方式：
+
+| | **remote 模式**（跨机器，本仓库默认） | **local 模式**（同机同仓库） |
+|---|---|---|
+| 场景 | Claude 与 Codex 在两台电脑上，经 GitHub `Jiangzhixungod/co_dev` 协作 | Claude Code 与 Codex 在同一台电脑、同一个仓库目录里协作 |
+| 送达 | `send` 推送工单分支，**推送即送达**；`inbox` / `open` 先拉取 | `send` 只提交，**提交即送达**；不联网 |
+| 工作区 | 各自一份 | **共享一份**：同一时间只进行一张工单（串行） |
+| 额外护栏 | 远端有本地没见过的提交时拒绝 `send` | 对方持球时拒绝切换分支（否则会把对方正在用的工作区切走）；需要切分支的 `open` 必须带 `-As` |
+| 合并 | 合入 main、推送、删除远端工单分支 | 合入本地 main；配置了远端时同时推送 main |
+| 设定 | `scripts\collab.cmd setup -Mode remote` | `scripts\collab.cmd setup -Mode local` |
+
+未显式设定时：有 `origin` 远端即 remote，否则 local。下表中的"推送"在 local 模式下读作"提交"。
 
 | 概念 | 规定 |
 |---|---|
@@ -307,10 +318,10 @@ Override: <理由>                         用户明确授权
 
 | 子命令 | 谁用 | 作用 |
 |---|---|---|
-| `setup` | 双方，每台机器一次 | 安装 git 钩子、配置 `pull.ff=only` 等，并检查身份与远端 |
-| `inbox -As <claude\|codex>` | 双方，**每次开场** | 拉取远端，列出所有工单，★ 标出轮到自己的；检查 WIP 是否过期 |
-| `new -Slug <slug>` | claude | 从 `origin/main` 建工单分支与目录，生成 `00-ticket.md` |
-| `open -Ticket T-0001` | 双方 | 切到工单分支并快进到远端最新，显示状态与消息列表 |
+| `setup [-Mode remote\|local]` | 双方，每个克隆一次 | 安装 git 钩子、配置 `pull.ff=only` 等，设定模式，检查身份与远端 |
+| `inbox -As <claude\|codex>` | 双方，**每次开场** | （remote）拉取远端；列出所有工单，★ 标出轮到自己的；检查 WIP 是否过期 |
+| `new -Slug <slug>` | claude | 从 main（remote 为 `origin/main`）建工单分支与目录，生成 `00-ticket.md` |
+| `open -Ticket T-0001 -As <角色>` | 双方 | 切到工单分支（remote 下快进到远端最新），显示状态与消息列表 |
 | `msg -Ticket T-0001 -Type <类型> -As <角色>` | 双方 | 按模板生成下一条序号消息 |
 | `send -Ticket T-0001 -To <状态> -As <角色>` | 持球方 | 校验转移 → 写 STATUS → 提交 → 推送 |
 | `diff -Ticket T-0001 [-Since reviewed]` | claude | 显示待审代码 diff 的统计和完整查看命令 |
@@ -330,3 +341,4 @@ Codex 认为协约有问题，走质询通道提出。
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | v1.0 | 2026-11-03 | 初版：AgentCollab_Template + still-here 的跨机器适配 |
+| v1.1 | 2026-11-03 | 用户要求：增加 local 模式（同机同仓库，§2）；§9 增加协作工具 e2e 回归门禁 |

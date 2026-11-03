@@ -199,6 +199,43 @@ echo "" >> AGENTS.md
 no   "改受保护路径且无 trailer → 拒绝"             "BLOCKED" git commit -qam "改协约"
 ok   "带 Override trailer → 放行"                  git commit -qam "改协约" -m "Override: e2e"
 
+echo "== 本地模式（同机同仓库，无远端）=="
+git clone -q "$E/remote.git" "$E/local" || exit 2
+on local
+git remote remove origin
+git config user.name "sim-local" && git config user.email "local@sim.local"
+has  "setup -Mode local"                           "模式：local" $C setup -Mode local
+L=.ai-collab/tickets/T-0004-local-sort
+ok   "claude 建工单（编号接着 main 上的归档）"     $C new -Slug local-sort
+has  "本地模式派单：提交即送达，不推送"            "提交即送达" $C send -To dispatched -As claude
+has  "codex 同目录 inbox ★"                        "★  T-0004-local-sort" $C inbox -As codex
+no   "codex 持球时 claude 建新单被拒（工作区共享）" "正由 codex 持球" $C new -Slug other
+ok   "codex 打开（已在该分支上）"                  $C open -Ticket 4 -As codex
+mkdir -p src && echo 'x = 1' > src/local.py && git add src && git commit -qm "[T-0004] 本地模式编码"
+ok   "codex impl-report"                           $C msg -Type impl-report -As codex
+ok   "codex →impl_done"                            $C send -To impl_done -As codex
+has  "claude 同目录 inbox ★"                       "★  T-0004-local-sort *impl_done" $C inbox -As claude
+has  "本地模式 diff 以本地 main 为基"              "src/local.py" $C diff
+ok   "claude code-review + test-plan"              $C msg -Type code-review -As claude
+ok   "claude test-plan"                            $C msg -Type test-plan -As claude
+ok   "claude →test_dispatched"                     $C send -To test_dispatched -As claude
+ok   "codex test-report"                           $C msg -Type test-report -As codex
+ok   "codex →test_done"                            $C send -To test_done -As codex
+ok   "claude report-review"                        $C msg -Type report-review -As claude
+ok   "claude →accepted"                            $C send -To accepted -As claude
+has  "本地模式 merge 预览"                         "合入本地 main" $C merge -Ticket 4
+has  "本地模式 merge 执行"                         "已合入本地 main" $C merge -Ticket 4 -Push
+lacks "合并后本地工单分支已删除"                   "tkt/" git branch --list "tkt/*"
+has  "main 上归档 STATUS = merged"                 "state: merged" git show main:$L/STATUS
+ok   "建 T-0005"                                   $C new -Slug next
+ok   "派 T-0005"                                   $C send -To dispatched -As claude
+git switch -q main
+no   "本地模式下需要切分支时 open 必须带 -As"      "请用 -As" $C open -Ticket 5
+ok   "codex open -As codex"                        $C open -Ticket 5 -As codex
+H="$(CLAUDE_PROJECT_DIR="$E/local" bash .claude/hooks/session-start.sh 2>&1)"
+has  "hook 识别本地模式"                           "本地模式" printf '%s' "$H"
+has  "hook 本地模式显示工单状态"                   "T-0005-next *dispatched *持球 codex" printf '%s' "$H"
+
 echo
 echo "结果：PASS $pass  FAIL $fail    （工作目录 $E）"
 [ "$fail" -eq 0 ]
