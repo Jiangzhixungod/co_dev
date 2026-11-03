@@ -41,7 +41,7 @@ Codex 在同事的 Windows 电脑上负责编码与测试。**双方唯一的通
 ## 本机执行注意
 
 - 本机 PowerShell 里的 `bash` 是 **WSL 启动器**，不是 Git Bash。协作命令统一用 `scripts\collab.cmd`（在 Bash 工具里写作 `scripts/collab.cmd`）。
-- 本仓库远端走 SSH 别名：`git@github-co_dev:jiangzhixungod/co_dev.git`（部署密钥 `~/.ssh/id_ed25519_github`）。**不要改 `~/.ssh/config` 的 `github.com` 条目**，用户的其他项目用的是 johnhowl 账号。
+- 本仓库远端走 SSH 别名：`git@github-co_dev:Jiangzhixungod/co_dev.git`（部署密钥 `~/.ssh/id_ed25519_github`）。**不要改 `~/.ssh/config` 的 `github.com` 条目**，用户的其他项目用的是 johnhowl 账号。
 
 ---
 

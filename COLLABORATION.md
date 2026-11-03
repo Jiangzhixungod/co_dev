@@ -29,7 +29,7 @@
 
 ## 2. 通信：Git 就是消息总线
 
-双方不在同一台电脑，**只通过** GitHub 仓库 `jiangzhixungod/co_dev` 交换信息。
+双方不在同一台电脑，**只通过** GitHub 仓库 `Jiangzhixungod/co_dev` 交换信息。
 
 | 概念 | 规定 |
 |---|---|

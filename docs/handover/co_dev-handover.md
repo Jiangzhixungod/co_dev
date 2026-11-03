@@ -11,7 +11,7 @@
 
 **本轮做了什么**
 
-- 本机生成 GitHub 专用 SSH 密钥 `~/.ssh/id_ed25519_github`，作为**部署密钥（读写）**加到 `jiangzhixungod/co_dev`；
+- 本机生成 GitHub 专用 SSH 密钥 `~/.ssh/id_ed25519_github`，作为**部署密钥（读写）**加到 `Jiangzhixungod/co_dev`；
   `~/.ssh/config` 用别名 `github-co_dev`，**不占用** `github.com` 条目，不影响用户其他项目的 johnhowl 登录。
 - 本机安装 gh CLI（v2.103.3），登录账号 Jiangzhixungod（只用于本仓库管理，例如添加部署密钥）。
 - 从 AgentCollab_Template（`80eb526`）与 still-here（`e2c9a20`）迁移出协作体系，并做跨机器适配：

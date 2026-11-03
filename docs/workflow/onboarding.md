@@ -4,7 +4,7 @@
 |---|---|---|
 | 系统 | Windows | Windows（Codex 在 cmd 下运行） |
 | AI | Claude Code | Codex CLI |
-| 远端地址 | `git@github-co_dev:jiangzhixungod/co_dev.git` | 见下文第 1 步 |
+| 远端地址 | `git@github-co_dev:Jiangzhixungod/co_dev.git` | 见下文第 1 步 |
 
 前提：两台机器都装了 Git for Windows（自带 Git Bash 和 OpenSSH）。
 
@@ -38,7 +38,7 @@ type %USERPROFILE%\.ssh\id_ed25519_co_dev.pub
 ```
 
 把输出的公钥发给仓库管理员（Jiangzhixungod），加为 Deploy key 并勾选 **Allow write access**；
-用户本机可以直接运行：`gh repo deploy-key add <公钥文件> -R jiangzhixungod/co_dev --allow-write --title "codex 侧"`。
+用户本机可以直接运行：`gh repo deploy-key add <公钥文件> -R Jiangzhixungod/co_dev --allow-write --title "codex 侧"`。
 
 然后在 `%USERPROFILE%\.ssh\config` 中追加（文件不存在就新建）：
 
@@ -54,13 +54,13 @@ Host github-co_dev
 
 **方式 B：协作者账号**
 
-仓库管理员在 Settings → Collaborators 邀请同事的 GitHub 账号；同事用自己账号已有的 SSH 密钥，远端地址写 `git@github.com:jiangzhixungod/co_dev.git`。
+仓库管理员在 Settings → Collaborators 邀请同事的 GitHub 账号；同事用自己账号已有的 SSH 密钥，远端地址写 `git@github.com:Jiangzhixungod/co_dev.git`。
 
 ### 2. 克隆与初始化
 
 ```bat
 cd /d D:\
-git clone git@github-co_dev:jiangzhixungod/co_dev.git
+git clone git@github-co_dev:Jiangzhixungod/co_dev.git
 cd co_dev
 git config user.name "<同事的名字>"
 git config user.email "<同事的邮箱>"
