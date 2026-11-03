@@ -12,3 +12,6 @@ scripts/git-hooks/* text eol=lf
 
 # 工单状态文件由脚本解析，固定 LF
 STATUS text eol=lf
+
+# 只追加的日志：多张工单各自追加后合并时，两边都保留，不产生冲突
+FIXLOG.md merge=union

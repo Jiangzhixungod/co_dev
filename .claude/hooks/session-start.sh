@@ -11,6 +11,10 @@
 #   任务书最后一次更新之后 main 上又有几个提交；工作区有几处未提交改动。
 set -u
 
+# Windows Git Bash 会把 "origin/tkt/x:path" 这类参数当成路径列表改写成 "origin\tkt\x;path"，
+# 导致 git show 读不到文件。关闭 MSYS 的参数转换（其他平台上这两个变量无影响）。
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
 root="${CLAUDE_PROJECT_DIR:-.}"
 rel="docs/handover/next-session-prompt.md"
 file="$root/$rel"

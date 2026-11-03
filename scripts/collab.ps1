@@ -194,20 +194,33 @@ function Resolve-Ticket([string]$t) {
     Fail ("工单号 $t 有歧义：" + ($hits -join ", "))
 }
 
-function Get-TicketStatus([string]$dir) {
+# 默认：在该工单分支上时读工作区（open 之后它就是最新的）。
+# -Shared：读双方共享的状态，即远端优先（inbox 用；本地分支可能落后远端）。
+function Get-TicketStatus([string]$dir, [switch]$Shared) {
     $rel = "$TicketsRel/$dir/STATUS"
-    $cur = Get-CurrentBranch
-    if ($cur -eq "tkt/$dir") {
-        $abs = Join-Path $Root $rel
-        if (Test-Path -LiteralPath $abs) {
-            return (Read-StatusText ([System.IO.File]::ReadAllText($abs, $Utf8)))
-        }
+    $abs = Join-Path $Root $rel
+    $onBranch = ((Get-CurrentBranch) -eq "tkt/$dir")
+    if ($onBranch -and -not $Shared -and (Test-Path -LiteralPath $abs)) {
+        return (Read-StatusText ([System.IO.File]::ReadAllText($abs, $Utf8)))
     }
     foreach ($ref in @("$Remote/tkt/$dir", "tkt/$dir")) {
         $txt = @(Invoke-GitOut @("show", ($ref + ":" + $rel)) -AllowFail)
         if ($txt.Count -gt 0) { return (Read-StatusText ($txt -join "`n")) }
     }
+    if ($onBranch -and (Test-Path -LiteralPath $abs)) {
+        return (Read-StatusText ([System.IO.File]::ReadAllText($abs, $Utf8)))  # 从未提交过的草稿
+    }
     return [ordered]@{}
+}
+
+# 已合并工单的本地残留：远端工单分支已删，本地分支上提交过工单目录，且已并入 origin/main。
+# （刚 new 出来、尚未发送的草稿分支没有提交过工单目录，不会被误判。）
+function Test-MergedLocalTicket([string]$dir) {
+    if (Test-RefExists "$Remote/tkt/$dir") { return $false }
+    if (-not (Test-RefExists "refs/heads/tkt/$dir")) { return $false }
+    if (-not (Test-RefExists "$Remote/main")) { return $false }
+    if (-not (Test-RefExists ("tkt/" + $dir + ":" + "$TicketsRel/$dir/STATUS"))) { return $false }
+    return ((Invoke-GitRun @("merge-base", "--is-ancestor", "tkt/$dir", "$Remote/main") -AllowFail) -eq 0)
 }
 
 function Assert-Role {
@@ -327,8 +340,21 @@ function Cmd-Setup {
 
 function Cmd-Inbox {
     Invoke-Fetch
-    $dirs = @(Get-AllTicketDirs)
     $cur = Get-CurrentBranch
+
+    # 已合并工单的本地残留分支：清理，避免误报
+    $merged = @{}
+    foreach ($d in @(Get-AllTicketDirs)) {
+        if (-not (Test-MergedLocalTicket $d)) { continue }
+        $merged[$d] = $true
+        if ($cur -eq "tkt/$d") {
+            Warn "工单 $d 已合入 main。请切回 main：git switch main && git pull"
+        } else {
+            [void](Invoke-GitRun @("branch", "-q", "-D", "tkt/$d") -AllowFail)
+            Info "已清理本地分支 tkt/$d（该工单已合入 main）"
+        }
+    }
+    $dirs = @(Get-AllTicketDirs | Where-Object { -not $merged.ContainsKey($_) })
     Info ""
     if ($dirs.Count -eq 0) {
         Info "（没有进行中的工单。已合并的工单归档在 main 的 $TicketsRel/）"
@@ -336,11 +362,15 @@ function Cmd-Inbox {
         Info ("{0,-2} {1,-30} {2,-17} {3,-7} {4,-17} {5}" -f "", "工单", "状态", "持球", "更新", "最新消息")
         $mine = 0
         foreach ($d in $dirs) {
-            $st = Get-TicketStatus $d
+            $st = Get-TicketStatus $d -Shared
             $flag = ""
             if ($As -ne "" -and $st["owner"] -eq $As) { $flag = "★"; $mine++ }
             $note = ""
             if (-not (Test-RefExists "$Remote/tkt/$d")) { $note = "（未推送）" }
+            elseif (Test-RefExists "refs/heads/tkt/$d") {
+                $ahead = Get-GitLine @("rev-list", "--count", "$Remote/tkt/$d..tkt/$d")
+                if ($ahead -ne "" -and [int]$ahead -gt 0) { $note = "（本地有 $ahead 个未推送提交）" }
+            }
             $upd = [string]$st["updated"]
             if ($upd.Length -ge 16) { $upd = $upd.Substring(0, 16).Replace("T", " ") }
             Info ("{0,-2} {1,-30} {2,-17} {3,-7} {4,-17} {5}{6}" -f $flag, $d, $st["state"], $st["owner"], $upd, $st["message"], $note)
@@ -405,8 +435,8 @@ function Cmd-New {
 }
 
 function Cmd-Open {
+    Invoke-Fetch   # 先拉取：对方刚派 / 刚交的工单要能解析到
     $dir = Resolve-Ticket $Ticket
-    Invoke-Fetch
     $branch = "tkt/$dir"
     $cur = Get-CurrentBranch
     if ($cur -ne $branch) {
@@ -555,9 +585,9 @@ function Cmd-Wip {
 }
 
 function Cmd-Merge {
+    Invoke-Fetch
     $dir = Resolve-Ticket $Ticket
     $branch = "tkt/$dir"
-    Invoke-Fetch
     $st = Get-TicketStatus $dir
     if ($st["state"] -ne "accepted") { Fail "只有 accepted 的工单能合并（当前 $($st['state'])）。" }
     $tip = "$Remote/$branch"
