@@ -14,7 +14,11 @@ def main() -> int:
     args = parser.parse_args()
 
     numbers: List[int] = []
-    for token in sys.stdin.read().split():
+    # 固定输入编码；非法字节以转义文本保留，进入整数解析的错误路径。
+    input_text = sys.stdin.buffer.read().decode(
+        "utf-8", errors="backslashreplace"
+    )
+    for token in input_text.split():
         try:
             numbers.append(int(token))
         except ValueError:
