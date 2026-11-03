@@ -48,7 +48,7 @@ gh auth login
 ### 2. 克隆与初始化
 
 ```bat
-cd /d D:\
+cd /d <放仓库的父目录，例如 E:\ai_work>
 gh repo clone Jiangzhixungod/co_dev
 cd co_dev
 git config user.name "<同事的名字>"
@@ -62,7 +62,7 @@ scripts\collab.cmd inbox -As codex
 ### 3. Codex 配置
 
 - **联网**：Codex 要执行 `git fetch` / `git push`。如果沙箱禁止网络，在 `%USERPROFILE%\.codex\config.toml` 中允许工作区写入模式下的网络访问，或在 Codex 请求时手动批准这些命令。
-- **信任项目**：在 `D:\co_dev` 下启动 Codex，信任这个目录，以便它载入 `AGENTS.md` 与 `.agents\skills\`。
+- **信任项目**：在仓库根目录（例如 `E:\ai_work\co_dev`；盘符和路径任意，两台机器不必一致）下启动 Codex，信任这个目录，以便它载入 `AGENTS.md` 与 `.agents\skills\`。
 - 验证：在 Codex 里问"你的开场步骤是什么"，它应该回答先跑 `scripts\collab.cmd inbox -As codex`；输入 `/skills`，应该能看到 `collab-worker` 和 `still-here`。
 
 ### 4. 日常

@@ -3,7 +3,8 @@
 **用途**：在同事的电脑上，让 Codex 自己完成"装 gh → 部署密钥 → SSH 别名 → 克隆 → 初始化"。
 克隆完成后，`AGENTS.md` 会自动接管；之后的 pull 由 `scripts\collab.cmd` 在每次 `inbox` / `open` / `send` 时自动完成。
 
-**用法**：在 cmd 里进入任意目录（例如 `D:\`）启动 Codex，把下面整段粘贴给它。
+**用法**：在 cmd 里进入你打算放仓库的目录（例如 `E:i_work\co_dev`，空目录即可），在那里启动 Codex，把下面整段粘贴给它。
+仓库放在哪个盘、哪个目录都可以，脚本里没有写死路径；只要求**以后都在仓库根目录启动 Codex**。
 
 **唯一需要本人做的一步**：`gh auth login` 的浏览器授权（GitHub 要求人工确认）。
 Codex 写 `~/.ssh`、安装软件、联网时会请求批准，逐个批准即可。
@@ -37,15 +38,18 @@ Codex 写 `~/.ssh`、安装软件、联网时会请求批准，逐个批准即�
    d. 验证：ssh -T -o StrictHostKeyChecking=accept-new git@github-co_dev
       输出包含 "Hi Jiangzhixungod/co_dev!" 才算成功（这条命令的退出码是 1，属于正常）。
 
-4. 克隆：如果 D:\co_dev 不存在，在 D:\ 下运行 git clone git@github-co_dev:Jiangzhixungod/co_dev.git；
-   如果已经存在，进入该目录运行 git pull --ff-only。
+4. 克隆到当前目录（你的启动目录，下文称"仓库目录"）：
+   - 当前目录是空的：git clone git@github-co_dev:Jiangzhixungod/co_dev.git .   （末尾有个点）
+   - 当前目录已经是 co_dev 的克隆（有 .git，且 git remote get-url origin 指向 Jiangzhixungod/co_dev）：
+     git remote set-url origin git@github-co_dev:Jiangzhixungod/co_dev.git，然后 git pull --ff-only
+   - 当前目录不是空的，也不是 co_dev 的克隆：停下来问我，不要删除、移动或覆盖任何文件。
 
-5. 初始化：cd /d D:\co_dev
+5. 初始化（在仓库目录下）：
    问我提交时用的名字和邮箱，然后运行 git config user.name "<名字>" 和 git config user.email "<邮箱>"（只写入本仓库，不要用 --global）。
    再运行 scripts\collab.cmd setup -Mode remote。
 
-6. 完成后：完整阅读 D:\co_dev\AGENTS.md 和 D:\co_dev\COLLABORATION.md，运行 scripts\collab.cmd inbox -As codex，把结果告诉我。
-   之后请在 D:\co_dev 目录重新启动 Codex，让它自动载入 AGENTS.md 和 .agents\skills。
+6. 完成后：完整阅读仓库目录下的 AGENTS.md 和 COLLABORATION.md，运行 scripts\collab.cmd inbox -As codex，把结果告诉我。
+   然后提醒我：在仓库目录重新启动 Codex，让它自动载入 AGENTS.md 和 .agents\skills。
 
 7. 可选：问我是否要运行 gh auth logout。登出后，这台机器对 GitHub 的访问只剩这把部署密钥，也就只能访问 co_dev。
 
@@ -57,5 +61,5 @@ Codex 写 `~/.ssh`、安装软件、联网时会请求批准，逐个批准即�
 ## 接入之后
 
 - **以后的 pull**：不需要手动执行。`collab inbox` / `open` / `send` 都会先拉取远端；`AGENTS.md` 要求 Codex 每次开场先跑 `inbox`。
-- **日常**：在 `D:\co_dev` 启动 Codex，说"按 $collab-worker 处理收件箱里的工单"。
+- **日常**：在仓库根目录（例如 `E:i_work\co_dev`）启动 Codex，说"按 $collab-worker 处理收件箱里的工单"。
 - **（以后可选）无人值守**：可以用 Windows 计划任务定时运行 `codex exec`，让它自动查收件箱、接单。这样做意味着 agent 在无人看着的情况下改代码、推送，建议先人工跑通几轮，再考虑开启。
