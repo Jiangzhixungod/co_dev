@@ -1,11 +1,11 @@
 ticket: T-0001-merge-sort
-state: impl_done
-owner: claude
-by: codex
-updated: 2026-11-03T21:47:21+08:00
-message: 01-impl-report.md
+state: fix_requested
+owner: codex
+by: claude
+updated: 2026-11-03T05:53:43-08:00
+message: 02-code-review.md
 base: 31bbb49cbf23b356724a3c31206901a9c3bda66d
 code_head: 139cfc89261f0d95a60beca76d8570c2464707cc
-reviewed_head: 
+reviewed_head: 139cfc89261f0d95a60beca76d8570c2464707cc
 resume: 
 rework: 0
