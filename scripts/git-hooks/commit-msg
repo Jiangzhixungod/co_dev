@@ -1,0 +1,37 @@
+#!/bin/sh
+# co_dev 护栏：受保护路径（协作"规则引擎"）的改动必须带授权 trailer 才能提交。
+# 这把 B 级规则做成机制，而不是靠自觉。见 COLLABORATION.md §9。
+#
+# 授权方式（写在提交信息末尾）：
+#   Aligned-By: <工单>/<NN-resolution.md>   基于一次对齐裁决
+#   Override: <理由>                         用户明确授权
+
+msg_file="$1"
+
+# 合并提交放行：被合并的提交已经各自过检。
+git_dir=$(git rev-parse --git-dir)
+[ -f "$git_dir/MERGE_HEAD" ] && exit 0
+
+protected_re='^(COLLABORATION\.md|CLAUDE\.md|AGENTS\.md|\.gitignore|\.gitattributes|\.ai-collab/templates/|\.ai-collab/README\.md|scripts/|\.claude/|\.agents/|docs/workflow/|docs/design/project-profile\.md)'
+
+staged=$(git diff --cached --name-only)
+protected=$(printf '%s\n' "$staged" | grep -E "$protected_re" || true)
+
+if [ -n "$protected" ]; then
+  if grep -qiE '^(Aligned-By|Override):' "$msg_file"; then
+    exit 0
+  fi
+  echo "" >&2
+  echo "BLOCKED: 提交涉及受保护路径，但没有授权 trailer。" >&2
+  echo "受保护的暂存文件：" >&2
+  printf '  %s\n' $protected >&2
+  echo "" >&2
+  echo "这些是 B 级改动（协作规则 / 契约 / 基建），须先走对齐通道或取得用户授权，" >&2
+  echo "然后在提交信息末尾加一行：" >&2
+  echo "  Aligned-By: <工单>/<NN-resolution.md>" >&2
+  echo "  Override: <理由>" >&2
+  echo "" >&2
+  exit 1
+fi
+
+exit 0

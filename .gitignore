@@ -1,0 +1,24 @@
+# 协作临时产物
+.ai-collab/tmp/
+.ai-collab/runs/
+
+# Claude Code 本机设置（个人权限等，不共享）
+.claude/settings.local.json
+
+# 常见构建 / 测试输出（项目确定技术栈后按需补充）
+build/
+dist/
+out/
+coverage/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# 本机文件
+*.user
+*.suo
+*.log
+!docs/testing/**/*.log
+.DS_Store
+Thumbs.db
