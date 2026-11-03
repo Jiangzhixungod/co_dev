@@ -77,5 +77,9 @@ scripts\collab.cmd wip -As codex -Commit
 
 ## 环境前提（同事机器，一次性）
 
-- 推送需要联网：Codex 的沙箱若禁止网络，`git fetch` 和 `git push` 会失败。请在 `%USERPROFILE%\.codex\config.toml` 中允许工作区写入模式下的网络访问，或在 Codex 请求时批准。
+- 推送需要联网：Codex 的沙箱若禁止网络，`git fetch` 和 `git push` 会失败。可以在 `%USERPROFILE%\.codex\config.toml` 里加上下面两行（键名以所用 Codex 版本的官方文档为准），也可以在 Codex 请求时手动批准：
+  ```toml
+  [sandbox_workspace_write]
+  network_access = true
+  ```
 - clone 之后先跑一次 `scripts\collab.cmd setup`。完整步骤见 `docs/workflow/onboarding.md`。

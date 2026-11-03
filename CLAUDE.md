@@ -36,6 +36,7 @@ Codex 在同事的 Windows 电脑上负责编码与测试。**双方唯一的通
 - **推送或合并 `main`、打标签、修订协约，必须先经用户确认。** 工单分支的推送是消息投递，`collab send` 自动完成，不需要确认。
 - 一张工单只跑一次 `/code-review`。状态机已保证 `fix_done` 之后只能走主 agent 复审。
 - 改动受保护路径（协约 §9）时，提交信息带 `Override: <理由>`（用户授权），或带 `Aligned-By: <工单>/<NN-resolution.md>`。
+- 改了 `scripts/` 或 `.claude/hooks/`：先跑 `bash scripts/tests/collab-e2e.sh`，全部 PASS 后再提交。
 
 ## 本机执行注意
 

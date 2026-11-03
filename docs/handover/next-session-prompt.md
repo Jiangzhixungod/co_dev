@@ -10,23 +10,26 @@
 
 ```
 co_dev
-├─ A. 协作基建 ··············· 已搭好并推送到 GitHub（见交接件 0a）
-│  └─ 同事机器接入 ⬅ 等同事按 onboarding 操作
-├─ B. 需求与架构 ⬅ 当前这条线
-│  └─ 项目参数 ⬅ 本轮做这个：向用户问清项目内容，填写 project-profile
-└─ C. 实施（工单流）·········· 🔒 等 B（项目参数未填写前不派实施工单）
-   └─ T-0001 试点工单：用一张小工单走通全流程
+├─ A. 协作基建 ··············· 已推送 GitHub；e2e 回归全绿
+│  └─ 同事机器接入 ··········· 等同事操作（onboarding）
+├─ B. 真机试点 sortkit ⬅ 当前这条线
+│  └─ T-0001 稳定归并排序 + CLI ⬅ 已派单，跟进它走完全流程
+│     ├─ 派单 ✅
+│     ├─ 编码 → /code-review（一轮）→ 修复 → 主 agent 复审
+│     ├─ 测试方案（Claude）→ 测试程序 + 执行（Codex）→ 报告审查
+│     └─ 验收 → 用户确认 → 合并 → 复盘
+├─ C. 正式项目 ··············· 🔒 等用户给出项目内容
+└─ D. 流程通用化 ············· 🔒 等 B 复盘
 ```
 
 **本轮完成后往上走**：
 
 | 回到 | 那一级还剩什么 |
 |---|---|
-| ↑ B. 需求与架构 | 架构设计文档（docs/design/）、首批工单拆分 |
-| ↑↑ 根 | A 的同事接入；C 的全部实施 |
+| ↑ B. 真机试点 | 复盘：收集流程问题，修订协约 / 脚本（改脚本必须跑 e2e） |
+| ↑↑ 根 | C 正式项目；D 通用化（模板仓库 + 一键安装） |
 
 ⚠️ 状态在树里画一次，**权威在 tracker 和各工单的 STATUS**；冲突时以它们为准。
-树每轮**整体重画**，所以不会漂移；复制到别处的副本才会。
 
 ## 先读
 
@@ -37,17 +40,23 @@ co_dev
 
 ## 开工前有没有待拍板的事
 
-有。**这个项目要做什么，用户还没说。** 协作骨架是通用的，项目参数全部空着。
+无。（"harness 边界"的理解见交接件 0a，若用户另有所指，按用户的意思修订协约 §4.6。）
 
-# 任务：填写项目参数，准备试点工单
+# 任务：跟进 T-0001，把真机试点走到闭环
 
-1. 向用户问清楚，并写进 `docs/design/project-profile.md`（受保护路径，提交带 `Override: 用户提供项目参数`）：
-   - 项目领域与目标用户
-   - 技术栈（语言、框架、运行环境；同事的 Windows 机器上是否已装好）
-   - 构建命令；单元、集成、全量回归三层测试各自的运行命令和测试框架
-   - 只读参考资料
-2. 确认同事机器已按 `docs/workflow/onboarding.md` 接入：同事那边 `scripts\collab.cmd setup` 正常，Codex 能 push。
-3. 设计并派发 **T-0001 试点工单**：选一个小而真实的切片（例如项目骨架 + 一个最小功能 + 三层测试各一个用例），目的是**把协作全流程走通一遍**。走完后复盘：协约或脚本哪里不顺，就提修订。
+按 inbox 上 T-0001 的状态行动（协约 §3 的状态表）：
+
+| 状态 | 动作 |
+|---|---|
+| `dispatched` | 等 Codex。可以问用户：同事是否已接入？ |
+| `impl_done` | `/collab-review`：跑**唯一一轮** `/code-review`。重点核对 reverse 稳定性（先升序再整体反转的写法是错的）、key 只计算一次、不修改入参、不使用内置排序 |
+| `fix_done` | `/collab-review`：主 agent 复审（**不再跑 /code-review**） |
+| `review_passed` | `/collab-testplan`：Claude 写方案，Codex 写测试程序。用 `sorted()` 做对照预言（只许出现在测试代码里），随机用例固定种子；变异至少覆盖：reverse 不稳定、修改入参、CLI 错误退出码 |
+| `test_done` | `/collab-accept`：审查报告 |
+| `accepted` | 预览合并 → **请用户确认** → `merge -Push` |
+| `query` | `/collab-resolve` |
+
+闭环之后：和用户、同事一起复盘，把流程问题记进交接件，并提出协约修订。
 
 ## 判据怎么写
 
@@ -60,6 +69,7 @@ co_dev
 |---|---|
 | 合作协约 | `COLLABORATION.md` |
 | 协作命令 | `scripts/collab.cmd`（协约 §12） |
+| 协作工具的回归测试 | `bash scripts/tests/collab-e2e.sh` |
 | 消息模板 | `.ai-collab/templates/` |
 | Claude 技能 | `/collab-dispatch` `/collab-review` `/collab-testplan` `/collab-accept` `/collab-resolve` `/still-here` |
 | Codex 技能 | `$collab-worker` `$still-here`（`.agents/skills/`） |
@@ -67,15 +77,16 @@ co_dev
 
 ## 后面还有什么
 
-见 tracker。
+见 tracker 的 C、D 两条线。
 
 ## 工作方式（长期约定，逐轮继承）
 
 - 全部用中文；代码标识符、命令、文件名用英文。
-- Claude 不写产品代码；设计、工单、审查、测试方案、验收由 Claude 负责。
+- Claude 不写产品代码，测试程序也由 Codex 写；设计、工单、审查、测试方案、验收由 Claude 负责。
 - 推送或合并 main、打标签、修订协约，先问用户。
 - 本机 PowerShell 的 `bash` 是 WSL。协作命令统一走 `scripts/collab.cmd`。
 - 本仓库远端用 SSH 别名 `github-co_dev`；不要动 `~/.ssh/config` 里的 `github.com` 条目（用户其他项目用的是 johnhowl 账号）。
+- 本机 gh CLI 登录的是 Jiangzhixungod（用于管理本仓库，例如添加部署密钥）。
 
 ## 收口时怎么更新这个文件
 

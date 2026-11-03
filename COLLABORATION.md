@@ -283,6 +283,9 @@ Override: <理由>                         用户明确授权
 
 合并提交不受此限（被合并的提交已经各自过检）。工单消息目录 `.ai-collab/tickets/` 不在保护范围内。
 
+**协作工具自身的回归门禁**：改动 `scripts/`、`.claude/hooks/` 之后，必须先在 Git Bash 里跑通
+`bash scripts/tests/collab-e2e.sh`（全部 PASS），再提交。这个测试在本机模拟两台机器，把状态机完整走一遍。
+
 ---
 
 ## 10. 必须停下来等人类的情形

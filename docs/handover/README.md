@@ -14,9 +14,10 @@
 
 | 线 | 范围 | 状态看哪里 | 阻塞性质 |
 |---|---|---|---|
-| A. 协作基建 | 协约、脚本、钩子、技能、交接体系 | [tracker §A](../plan/tracker.md) | 工作量 |
-| B. 需求与架构 | 项目领域、技术栈、构建测试契约、设计文档 | [project-profile](../design/project-profile.md)、[tracker §B](../plan/tracker.md) | 等用户给出项目内容 |
-| C. 实施（工单流） | 一张张工单：派单 → 编码 → 审查 → 测试 → 验收 → 合并 | `scripts\collab.cmd inbox`（工单状态的唯一真源） | 等 B |
+| A. 协作基建 | 协约、脚本、钩子、技能、交接体系、e2e 回归 | [tracker §A](../plan/tracker.md) | 工作量 / 同事接入 |
+| B. 真机试点 | sortkit：用一张小工单跨两台机器走通全流程 | [tracker §B](../plan/tracker.md)；工单状态：`scripts\collab.cmd inbox` | 依赖同事机器接入 |
+| C. 正式项目 | 项目领域、技术栈、架构、工单 | [project-profile](../design/project-profile.md)、[tracker §C](../plan/tracker.md) | 等用户给出项目内容 |
+| D. 流程通用化 | 抽成模板仓库 + 一键安装，供其他项目复用 | [tracker §D](../plan/tracker.md) | 等 B 复盘 |
 
 **总账（所有待办的唯一清单）**：[tracker](../plan/tracker.md)。
 **任何摘要与它冲突，以它为准；发现摘要错了，改摘要，不要改总账。**
