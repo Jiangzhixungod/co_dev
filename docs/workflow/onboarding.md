@@ -4,7 +4,7 @@
 |---|---|---|
 | 系统 | Windows | Windows（Codex 在 cmd 下运行） |
 | AI | Claude Code | Codex CLI |
-| 远端地址 | `git@github-co_dev:Jiangzhixungod/co_dev.git` | 见下文第 1 步 |
+| 远端地址 | `git@github-co_dev:Jiangzhixungod/co_dev.git`（部署密钥 + 别名） | `git@github.com:Jiangzhixungod/co_dev.git`（本人账号密钥） |
 
 前提：两台机器都装了 Git for Windows（自带 Git Bash 和 OpenSSH）。
 
@@ -28,39 +28,26 @@
 
 ## 同事电脑（Codex 侧），在 cmd 里操作
 
-### 1. 访问权限（二选一）
-
-**方式 A：部署密钥（推荐，只能访问这一个仓库）**
+### 1. 访问权限：用 gh 自助完成（同事就是仓库所有者 Jiangzhixungod）
 
 ```bat
-ssh-keygen -t ed25519 -N "" -C "co_dev-codex" -f %USERPROFILE%\.ssh\id_ed25519_co_dev
-type %USERPROFILE%\.ssh\id_ed25519_co_dev.pub
+winget install --id GitHub.cli -e
+gh auth login
 ```
 
-把输出的公钥发给仓库管理员（Jiangzhixungod），加为 Deploy key 并勾选 **Allow write access**；
-用户本机可以直接运行：`gh repo deploy-key add <公钥文件> -R Jiangzhixungod/co_dev --allow-write --title "codex 侧"`。
+按提示依次选择：**GitHub.com → SSH → 生成新的 SSH 密钥**（已有密钥就选上传已有的）**→ 用浏览器登录**。
+`gh` 会把公钥上传到 Jiangzhixungod 账号。验证：`ssh -T git@github.com`，看到 `Hi Jiangzhixungod!` 即成功。
 
-然后在 `%USERPROFILE%\.ssh\config` 中追加（文件不存在就新建）：
-
-```
-Host github-co_dev
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_co_dev
-    IdentitiesOnly yes
-```
-
-验证：`ssh -T git@github-co_dev`
-
-**方式 B：协作者账号**
-
-仓库管理员在 Settings → Collaborators 邀请同事的 GitHub 账号；同事用自己账号已有的 SSH 密钥，远端地址写 `git@github.com:Jiangzhixungod/co_dev.git`。
+> 另一种做法：只想给这台机器开放这一个仓库的权限时，可以改用部署密钥（所有者才能添加）：
+> `ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_co_dev`，然后
+> `gh repo deploy-key add %USERPROFILE%\.ssh\id_ed25519_co_dev.pub -R Jiangzhixungod/co_dev --allow-write --title "codex 侧"`，
+> 再像用户本机那样在 `~/.ssh/config` 里配一个别名。
 
 ### 2. 克隆与初始化
 
 ```bat
 cd /d D:\
-git clone git@github-co_dev:Jiangzhixungod/co_dev.git
+gh repo clone Jiangzhixungod/co_dev
 cd co_dev
 git config user.name "<同事的名字>"
 git config user.email "<同事的邮箱>"
