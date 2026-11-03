@@ -28,6 +28,8 @@
 
 ## 同事电脑（Codex 侧），在 cmd 里操作
 
+> **省事做法**：把 [codex-bootstrap.md](codex-bootstrap.md) 里的引导提示词粘贴给 Codex，让它自动完成下面 1、2 两步（只有浏览器授权需要本人操作）。
+
 ### 1. 访问权限：用 gh 自助完成（同事就是仓库所有者 Jiangzhixungod）
 
 ```bat
