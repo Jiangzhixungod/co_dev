@@ -1,6 +1,6 @@
 # co_dev 合作协约（Claude × Codex）
 
-> **版本 v1.1 ｜ 生效 2026-11-03 ｜ 适用：本仓库全部工作**
+> **版本 v1.2 ｜ 生效 2026-11-03 ｜ 适用：本仓库全部工作**
 >
 > 本协约是 Claude 与 Codex **共同遵守的唯一权威规约**。`CLAUDE.md`、`AGENTS.md`、
 > `.claude/skills/`、`scripts/` 都只是它的执行入口；任何入口与本协约冲突，**以本协约为准**，
@@ -137,7 +137,8 @@ fix_requested ─修复完成─▶ fix_done ─[Claude 主 agent 复审]─┐ 
 ### 4.3 代码审查：`/code-review` 一轮（Claude，`code-review`）
 
 - 每张工单**只跑一次** `/code-review`，对象是 `origin/main...code_head` 的代码 diff（不含 `.ai-collab/tickets/`）。默认档位 `high`，用户可改。
-- 结果写入消息：结论（`pass` / `fail`）；发现清单（严重度 `blocker` / `major` / `minor` / `note`，文件:行，问题，理由）；**必改项**编号 `F1`、`F2`…（每条可独立验证）；建议补充的测试。
+- **分诊（必须做）**：`/code-review` 的审查代理不了解项目全貌，会有误报，也会有"理论上成立、实际不影响"的发现。Claude 必须逐条分析，**只有确认真实、并且违反工单契约或会造成实际影响的，才列为必改项**；其余标为"可选"或"不采纳"，并写明理由。不能把 `/code-review` 的结果原样转发给 Codex。具体规则见 `.claude/skills/collab-review/SKILL.md`。
+- 结果写入消息：结论（`pass` / `fail`）；发现清单（严重度 `blocker` / `major` / `minor` / `note`，文件:行，问题，理由，**处置**）；**必改项**编号 `F1`、`F2`…（每条可独立验证）；契约澄清；建议补充的测试。
 - 有必改项 → `fix_requested`（**这份审查就是修复工单**）；无必改项 → `review_passed`，或直接接着出测试方案转 `test_dispatched`。
 - `minor` / `note` 不阻塞，Codex 可顺手修，不强制。
 
@@ -342,3 +343,4 @@ Codex 认为协约有问题，走质询通道提出。
 |---|---|---|
 | v1.0 | 2026-11-03 | 初版：AgentCollab_Template + still-here 的跨机器适配 |
 | v1.1 | 2026-11-03 | 用户要求：增加 local 模式（同机同仓库，§2）；§9 增加协作工具 e2e 回归门禁 |
+| v1.2 | 2026-11-03 | 用户要求：§4.3 增加 `/code-review` 结果分诊，确实是 bug 才派修复（T-0001 审查时提出） |
