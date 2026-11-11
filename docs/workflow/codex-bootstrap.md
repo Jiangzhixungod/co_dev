@@ -3,7 +3,7 @@
 **用途**：在同事的电脑上，让 Codex 自己完成"装 gh → 部署密钥 → SSH 别名 → 克隆 → 初始化"。
 克隆完成后，`AGENTS.md` 会自动接管；之后的 pull 由 `scripts\collab.cmd` 在每次 `inbox` / `open` / `send` 时自动完成。
 
-**用法**：在 cmd 里进入你打算放仓库的目录（例如 `E:i_work\co_dev`，空目录即可），在那里启动 Codex，把下面整段粘贴给它。
+**用法**：在 cmd 里进入你打算放仓库的目录（例如 `E:\ai_work\co_dev`，空目录即可），在那里启动 Codex，把下面整段粘贴给它。
 仓库放在哪个盘、哪个目录都可以，脚本里没有写死路径；只要求**以后都在仓库根目录启动 Codex**。
 
 **唯一需要本人做的一步**：`gh auth login` 的浏览器授权（GitHub 要求人工确认）。
@@ -61,5 +61,5 @@ Codex 写 `~/.ssh`、安装软件、联网时会请求批准，逐个批准即�
 ## 接入之后
 
 - **以后的 pull**：不需要手动执行。`collab inbox` / `open` / `send` 都会先拉取远端；`AGENTS.md` 要求 Codex 每次开场先跑 `inbox`。
-- **日常**：在仓库根目录（例如 `E:i_work\co_dev`）启动 Codex，说"按 $collab-worker 处理收件箱里的工单"。
+- **日常**：在仓库根目录（例如 `E:\ai_work\co_dev`）启动 Codex，说"按 $collab-worker 处理收件箱里的工单"。
 - **（以后可选）无人值守**：可以用 Windows 计划任务定时运行 `codex exec`，让它自动查收件箱、接单。这样做意味着 agent 在无人看着的情况下改代码、推送，建议先人工跑通几轮，再考虑开启。
