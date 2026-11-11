@@ -193,6 +193,37 @@ has  "hook 注入任务书"                             "本轮任务书" printf
 has  "hook 任务书之后有新提交 → 过期警告"          "任务书可能已过期" printf '%s' "$H"
 has  "hook 收件箱显示 origin/tkt/* 的状态"         "T-0004-gamma *dispatched *持球 codex" printf '%s' "$H"
 
+echo "== 取消工单（Codex 拉取后自动收口）=="
+on claude
+ok   "建 T-0005"                                   $C new -Slug delta
+ok   "派 T-0005"                                   $C send -To dispatched -As claude
+git switch -q main
+on codex
+ok   "codex 打开 T-0005（留下本地分支）"           $C open -Ticket 5 -As codex
+git switch -q main
+ok   "codex 打开 T-0004"                           $C open -Ticket 4 -As codex
+echo "wip" > g4.txt && git add g4.txt && git commit -qm "[T-0004] 未推送的半成品"
+on claude
+for t in 4 5; do
+  ok "T-000$t：claude 打开"                        $C open -Ticket $t -As claude
+  ok "T-000$t：取消说明 note"                      $C msg -Type note -As claude
+  ok "T-000$t：claude →cancelled"                  $C send -To cancelled -As claude
+done
+has  "远端 STATUS = cancelled"                     "state: cancelled" git show origin/tkt/T-0005-delta:.ai-collab/tickets/T-0005-delta/STATUS
+git switch -q main
+on codex
+I="$($C inbox -As codex 2>&1)"
+has  "停在已取消分支：提示停止并切回 main"         "T-0004-gamma 已被取消：停止该工单" printf '%s' "$I"
+has  "不在其上的已取消分支：自动清理"              "已清理本地分支 tkt/T-0005-delta（该工单已取消）" printf '%s' "$I"
+has  "已取消工单单独列出"                          "已取消（已结束，无需处理）：T-0004-gamma, T-0005-delta" printf '%s' "$I"
+lacks "已取消工单不再标 ★"                         "★" printf '%s' "$I"
+lacks "T-0005 本地分支已删除"                      "T-0005" git branch --list "tkt/*"
+no   "已取消工单：codex 旧分支 send 被拒"          "有本地没有的提交" $C send -Ticket 4 -To impl_done -As codex
+git switch -q main
+has  "有未推送提交的已取消分支：保留并提示"        "有 1 个未推送提交，未自动清理" $C inbox -As codex
+has  "T-0004 本地分支仍在"                         "T-0004" git branch --list "tkt/*"
+git branch -q -D tkt/T-0004-gamma
+
 echo "== commit-msg 护栏 =="
 on codex
 echo "" >> AGENTS.md

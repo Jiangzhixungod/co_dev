@@ -419,6 +419,28 @@ function Cmd-Inbox {
         }
     }
     $dirs = @(Get-AllTicketDirs | Where-Object { -not $merged.ContainsKey($_) })
+    # 已取消的工单：已结束，不再列入待办。远程模式下自动清理本地残留分支（收口）；
+    # 本地分支有未推送提交、或远端已无该分支（本地是唯一记录）时只提示，不删除。
+    $cancelled = @()
+    foreach ($d in $dirs) {
+        $cst = Get-TicketStatus $d -Shared
+        if ([string]$cst["state"] -ne "cancelled") { continue }
+        $cancelled += $d
+        if ((Test-Local) -or -not (Test-RefExists "refs/heads/tkt/$d")) { continue }
+        if ($cur -eq "tkt/$d") {
+            Warn "工单 $d 已被取消：停止该工单，不要再提交或推送。请切回 main：git switch main（之后再跑 inbox 会自动清理本地分支）"
+            continue
+        }
+        if (-not (Test-RefExists "$Remote/tkt/$d")) { continue }
+        $ahead = Get-GitLine @("rev-list", "--count", "$Remote/tkt/$d..tkt/$d")
+        if ($ahead -ne "" -and [int]$ahead -gt 0) {
+            Warn "工单 $d 已被取消，但本地分支 tkt/$d 有 $ahead 个未推送提交，未自动清理。确认不需要后：git branch -D tkt/$d"
+        } else {
+            [void](Invoke-GitRun @("branch", "-q", "-D", "tkt/$d") -AllowFail)
+            Info "已清理本地分支 tkt/$d（该工单已取消）"
+        }
+    }
+    $dirs = @($dirs | Where-Object { $cancelled -notcontains $_ })
 
     Info ""
     if (Test-Local) { Info "模式：local（同机同仓库）" }
@@ -445,6 +467,7 @@ function Cmd-Inbox {
         }
         if ($As -ne "") { Info ""; Info "轮到 $As 的工单：$mine 张" }
     }
+    if ($cancelled.Count -gt 0) { Info ""; Info ("已取消（已结束，无需处理）：" + ($cancelled -join ", ")) }
 
     Info ""
     $dirty = @(Get-DirtyPaths "")

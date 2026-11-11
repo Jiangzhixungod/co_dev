@@ -1,6 +1,6 @@
 # co_dev 合作协约（Claude × Codex）
 
-> **版本 v1.2 ｜ 生效 2026-11-03 ｜ 适用：本仓库全部工作**
+> **版本 v1.3 ｜ 生效 2026-11-11 ｜ 适用：本仓库全部工作**
 >
 > 本协约是 Claude 与 Codex **共同遵守的唯一权威规约**。`CLAUDE.md`、`AGENTS.md`、
 > `.claude/skills/`、`scripts/` 都只是它的执行入口；任何入口与本协约冲突，**以本协约为准**，
@@ -198,6 +198,18 @@ fix_requested ─修复完成─▶ fix_done ─[Claude 主 agent 复审]─┐ 
 
 `accepted` 之后，Claude **先请用户确认**，再执行 `collab merge -Push`：工单分支以 `--no-ff` 合入 `main`、推送、删除远端工单分支。版本标签（SemVer `vX.Y.Z`）由 Claude 在里程碑时提出，用户确认后再打。
 
+### 4.10 取消工单
+
+需求作废、方向改变，或工单不再属于本项目时，由 Claude 取消（**只有 Claude 能取消**，任何未结束状态都可以）：
+
+1. `collab open -Ticket <工单> -As claude`
+2. `collab msg -Type note -As claude`：写清取消原因，以及已有代码怎么处理（通常是不合并、直接放弃）
+3. `collab send -To cancelled -As claude`：推送工单分支即送达。远端分支保留，作为记录
+
+Codex 侧**不需要人工收口**：拉取 `main` 之后，下次 `collab inbox` 会把已取消的工单单独列为"已取消（已结束，无需处理）"，不再标 ★；
+本地残留的工单分支自动删除。两种情况只提示、不删除：Codex 正停在那条分支上（先切回 `main`）；本地分支还有未推送的提交（由同事确认后手动删除）。
+已取消的工单不能再 `send`。
+
 ---
 
 ## 5. 跨会话连续性（still-here 适配）
@@ -344,3 +356,4 @@ Codex 认为协约有问题，走质询通道提出。
 | v1.0 | 2026-11-03 | 初版：AgentCollab_Template + still-here 的跨机器适配 |
 | v1.1 | 2026-11-03 | 用户要求：增加 local 模式（同机同仓库，§2）；§9 增加协作工具 e2e 回归门禁 |
 | v1.2 | 2026-11-03 | 用户要求：§4.3 增加 `/code-review` 结果分诊，确实是 bug 才派修复（T-0001 审查时提出） |
+| v1.3 | 2026-11-11 | 用户要求：增加 §4.10 取消工单，Codex 拉取后自动收口（T-0001 试点取消时提出） |
