@@ -1,11 +1,11 @@
 ticket: T-0001-merge-sort
-state: fix_done
-owner: claude
-by: codex
-updated: 2026-11-03T22:00:02+08:00
-message: 03-fix-report.md
+state: cancelled
+owner: none
+by: claude
+updated: 2026-11-11T00:27:22-08:00
+message: 04-note.md
 base: 31bbb49cbf23b356724a3c31206901a9c3bda66d
 code_head: 4fb47ffe31394d77b6e6b1a6d4c1968da0c78fb3
-reviewed_head: 139cfc89261f0d95a60beca76d8570c2464707cc
+reviewed_head: 4fb47ffe31394d77b6e6b1a6d4c1968da0c78fb3
 resume: 
 rework: 0
